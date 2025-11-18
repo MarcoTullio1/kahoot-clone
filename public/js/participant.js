@@ -1,186 +1,141 @@
-// Conexão com Socket.IO
 const socket = io();
-
-// Estado da aplicação
 let participantId = null;
 let teamId = null;
-let teamName = null;
-let nickname = null;
 let currentQuestionId = null;
-let questionStartTime = null;
 let timerInterval = null;
-let totalScore = 0;
+let questionStartTime = null;
 
 // Elementos DOM
 const loginScreen = document.getElementById('loginScreen');
 const waitingScreen = document.getElementById('waitingScreen');
 const questionScreen = document.getElementById('questionScreen');
 const resultScreen = document.getElementById('resultScreen');
-const rankingScreen = document.getElementById('rankingScreen');
 const endScreen = document.getElementById('endScreen');
 
-// Inicializar
 document.addEventListener('DOMContentLoaded', () => {
-    // Obter código de acesso da URL
     const urlParams = new URLSearchParams(window.location.search);
     const accessCode = urlParams.get('code');
-    
+
     if (accessCode) {
-        // Validar código de acesso
         validateAccessCode(accessCode);
-    } else {
-        showScreen(loginScreen);
-        showError('Código de acesso não encontrado na URL');
     }
-    
-    setupEventListeners();
+
+    document.getElementById('formLogin').addEventListener('submit', handleLogin);
     setupSocketListeners();
 });
 
-// Configurar event listeners
-function setupEventListeners() {
-    document.getElementById('formLogin').addEventListener('submit', handleLogin);
-}
-
-// Configurar listeners do Socket.IO
 function setupSocketListeners() {
-    // Jogo iniciado
     socket.on('game:started', () => {
-        console.log('Jogo iniciado!');
+        console.log('Jogo começou!');
+        // Mantém na tela de espera até chegar a pergunta
     });
-    
-    // Nova pergunta
+
     socket.on('question:new', (questionData) => {
+        console.log('Nova pergunta recebida:', questionData);
         showQuestion(questionData);
     });
-    
-    // Resultado da resposta
+
     socket.on('answer:result', (result) => {
+        console.log('Resultado:', result);
         showResult(result);
     });
-    
-    // Mostrar ranking
-    socket.on('ranking:show', (rankingData) => {
-        showRanking(rankingData);
+
+    socket.on('game:ended', () => showEndScreen());
+
+    socket.on('participant:joined', (data) => {
+        participantId = data.participantId;
+        showScreen(waitingScreen);
+        document.getElementById('participantName').textContent = data.nickname;
     });
-    
-    // Jogo finalizado
-    socket.on('game:ended', () => {
-        showEndScreen();
-    });
-    
-    // Erro
-    socket.on('error', (data) => {
-        showError(data.message);
-    });
+
+    socket.on('error', (data) => alert('Erro: ' + data.message));
 }
 
-// Validar código de acesso
-async function validateAccessCode(accessCode) {
+async function validateAccessCode(code) {
     try {
-        const response = await fetch('/api/participant/join', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ accessCode })
+        const res = await fetch('/api/participant/join', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accessCode: code })
         });
-        
-        const data = await response.json();
-        
+        const data = await res.json();
         if (data.success) {
             teamId = data.team.id;
-            teamName = data.team.name;
-            
-            // Mostrar tela de login
+            document.getElementById('teamName').textContent = data.team.name;
             showScreen(loginScreen);
         } else {
-            showError('Código de acesso inválido');
+            alert('Código de acesso inválido');
         }
-    } catch (error) {
-        showError('Erro ao validar código de acesso');
-    }
+    } catch (e) { console.error(e); }
 }
 
-// Handle login
 function handleLogin(e) {
     e.preventDefault();
-    
-    nickname = document.getElementById('nickname').value.trim();
-    
-    if (!nickname) {
-        showError('Por favor, digite seu nome ou apelido');
-        return;
+    const nickname = document.getElementById('nickname').value;
+    if (nickname && teamId) {
+        socket.emit('participant:join', { teamId, nickname });
     }
-    
-    if (!teamId) {
-        showError('Time não identificado');
-        return;
-    }
-    
-    // Entrar no jogo via socket
-    socket.emit('participant:join', { teamId, nickname });
 }
 
-// Participante entrou com sucesso
-socket.on('participant:joined', (data) => {
-    participantId = data.participantId;
-    
-    // Mostrar tela de espera
-    document.getElementById('participantName').textContent = nickname;
-    document.getElementById('teamName').textContent = teamName;
-    document.getElementById('currentScore').textContent = totalScore;
-    
-    showScreen(waitingScreen);
-});
+function showQuestion(data) {
+    // 1. Prepara a tela
+    document.getElementById('currentQuestionNum').textContent = data.questionNumber;
+    document.getElementById('totalQuestions').textContent = data.totalQuestions;
+    document.getElementById('questionText').textContent = data.text;
 
-// Mostrar pergunta
-function showQuestion(questionData) {
-    currentQuestionId = questionData.id;
-    questionStartTime = Date.now();
-    
-    // Atualizar informações da pergunta
-    document.getElementById('currentQuestionNum').textContent = questionData.questionNumber;
-    document.getElementById('totalQuestions').textContent = questionData.totalQuestions;
-    document.getElementById('questionText').textContent = questionData.text;
-    
-    // Renderizar respostas
-    const answersContainer = document.getElementById('answersContainer');
-    answersContainer.innerHTML = questionData.answers.map(answer => `
-        <button class="answer-btn" data-answer-id="${answer.id}">
-            ${answer.text}
-        </button>
-    `).join('');
-    
-    // Adicionar event listeners aos botões de resposta
-    answersContainer.querySelectorAll('.answer-btn').forEach(btn => {
-        btn.addEventListener('click', () => selectAnswer(btn));
+    const container = document.getElementById('answersContainer');
+    container.innerHTML = ''; // Limpa botões antigos
+
+    const letters = ['A', 'B', 'C', 'D'];
+
+    // 2. Cria os botões de forma segura (sem onclick no HTML)
+    data.answers.forEach((answer, index) => {
+        const btn = document.createElement('button');
+        btn.className = 'answer-btn';
+        // Garante que o botão está habilitado ao nascer
+        btn.disabled = false;
+
+        btn.innerHTML = `
+            <span style="background: #667eea; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 10px; flex-shrink: 0;">${letters[index]}</span>
+            <span>${answer.text}</span>
+        `;
+
+        // Adiciona o evento de clique
+        btn.addEventListener('click', () => handleAnswerClick(answer.id, btn));
+
+        container.appendChild(btn);
     });
-    
-    // Iniciar timer
-    startTimer(questionData.timeLimit);
-    
-    // Mostrar tela de pergunta
+
     showScreen(questionScreen);
+
+    // 3. Inicia Timer
+    currentQuestionId = data.id;
+    questionStartTime = Date.now(); // Marca a hora que a pergunta apareceu
+    startTimer(data.timeLimit);
 }
 
-// Selecionar resposta
-function selectAnswer(btn) {
-    const answerId = parseInt(btn.dataset.answerId);
-    
-    // Desabilitar todos os botões
-    document.querySelectorAll('.answer-btn').forEach(b => {
+function handleAnswerClick(answerId, btnElement) {
+    // 1. Trava cliques múltiplos
+    if (btnElement.disabled) return;
+
+    // 2. Desabilita todos os botões visualmente
+    const allBtns = document.querySelectorAll('.answer-btn');
+    allBtns.forEach(b => {
         b.disabled = true;
+        b.style.opacity = '0.6';
+        b.style.cursor = 'default';
     });
-    
-    // Marcar resposta selecionada
-    btn.classList.add('selected');
-    
-    // Calcular tempo decorrido
-    const timeTaken = (Date.now() - questionStartTime) / 1000;
-    
-    // Parar timer
+
+    // 3. Destaca o escolhido
+    btnElement.classList.add('selected');
+    btnElement.style.opacity = '1';
+    btnElement.style.borderColor = '#667eea';
+    btnElement.style.background = '#e0e7ff';
+
+    // 4. Para o timer
     stopTimer();
-    
-    // Enviar resposta
+
+    // 5. Envia para o servidor
+    console.log('Enviando resposta...', answerId);
     socket.emit('participant:answer', {
         participantId,
         questionId: currentQuestionId,
@@ -188,55 +143,54 @@ function selectAnswer(btn) {
     });
 }
 
-// Iniciar timer
-function startTimer(timeLimit) {
-    const timerText = document.getElementById('timer');
-    const timerProgress = document.querySelector('.timer-progress');
-    
-    const circumference = 2 * Math.PI * 25; // raio = 25
-    timerProgress.style.strokeDasharray = circumference;
-    timerProgress.style.strokeDashoffset = 0;
-    
-    let timeRemaining = timeLimit;
-    timerText.textContent = timeRemaining;
-    
+function startTimer(seconds) {
+    stopTimer(); // Garante que não tem timer antigo rodando
+
+    const textEl = document.getElementById('timer');
+    const circle = document.querySelector('.timer-progress');
+    let left = seconds;
+
+    // Configura visual inicial
+    if (textEl) {
+        textEl.textContent = left;
+        textEl.style.color = '#2d3748';
+    }
+    if (circle) {
+        circle.style.strokeDasharray = 157;
+        circle.style.strokeDashoffset = 0;
+        circle.style.stroke = '#667eea';
+    }
+
     timerInterval = setInterval(() => {
-        timeRemaining--;
-        timerText.textContent = timeRemaining;
-        
-        // Atualizar círculo de progresso
-        const progress = timeRemaining / timeLimit;
-        const offset = circumference * (1 - progress);
-        timerProgress.style.strokeDashoffset = offset;
-        
-        // Mudar cor quando tempo está acabando
-        if (timeRemaining <= 5) {
-            timerProgress.style.stroke = '#e53e3e';
-            timerText.style.color = '#e53e3e';
+        left--;
+
+        if (textEl) textEl.textContent = left;
+
+        if (circle) {
+            const offset = 157 * (1 - (left / seconds));
+            circle.style.strokeDashoffset = offset;
+            if (left <= 5) {
+                circle.style.stroke = '#e53e3e';
+                if (textEl) textEl.style.color = '#e53e3e';
+            }
         }
-        
-        if (timeRemaining <= 0) {
+
+        if (left <= 0) {
             stopTimer();
-            // Desabilitar todos os botões
-            document.querySelectorAll('.answer-btn').forEach(b => {
-                b.disabled = true;
-            });
-            
-            // Mostrar mensagem de tempo esgotado
+            // Tempo acabou: desabilita tudo
+            document.querySelectorAll('.answer-btn').forEach(b => b.disabled = true);
+
+            // Mostra tela de erro após 1s
             setTimeout(() => {
-                showResult({
-                    success: false,
-                    message: 'Tempo esgotado!',
-                    isCorrect: false,
-                    pointsEarned: 0,
-                    timeTaken: timeLimit
-                });
-            }, 500);
+                // Só mostra "Tempo esgotado" se o usuário ainda estiver nesta tela
+                if (document.getElementById('questionScreen').classList.contains('active')) {
+                    showResult({ isCorrect: false, message: 'Tempo esgotado!', pointsEarned: 0, timeTaken: seconds });
+                }
+            }, 1000);
         }
     }, 1000);
 }
 
-// Parar timer
 function stopTimer() {
     if (timerInterval) {
         clearInterval(timerInterval);
@@ -244,98 +198,44 @@ function stopTimer() {
     }
 }
 
-// Mostrar resultado
 function showResult(result) {
-    const resultBox = document.getElementById('resultScreen').querySelector('.result-box');
-    const resultIcon = document.getElementById('resultIcon');
-    const resultTitle = document.getElementById('resultTitle');
-    const resultMessage = document.getElementById('resultMessage');
-    const pointsEarned = document.getElementById('pointsEarned');
-    const timeTaken = document.getElementById('timeTaken');
-    
+    const title = document.getElementById('resultTitle');
+    const msg = document.getElementById('resultMessage');
+    const pts = document.getElementById('pointsEarned');
+    const timeDisplay = document.getElementById('timeTaken');
+
     if (result.isCorrect) {
-        resultBox.className = 'result-box correct';
-        resultIcon.textContent = '✓';
-        resultIcon.style.color = '#38a169';
-        resultTitle.textContent = 'Correto!';
-        resultMessage.textContent = 'Parabéns, você acertou!';
-        pointsEarned.textContent = `+${result.pointsEarned} pontos`;
+        title.textContent = "Correto! 🎉";
+        title.style.color = "#38a169";
+        msg.textContent = "Mandou bem!";
+        pts.textContent = `+${result.pointsEarned} pontos`;
+
+        // --- CORREÇÃO: Atualiza a variável global de pontuação ---
         totalScore += result.pointsEarned;
+        // Atualiza também o mostrador da tela de espera para a próxima rodada
+        document.getElementById('currentScore').textContent = totalScore;
+        // ---------------------------------------------------------
+
     } else {
-        resultBox.className = 'result-box incorrect';
-        resultIcon.textContent = '✗';
-        resultIcon.style.color = '#e53e3e';
-        resultTitle.textContent = result.message || 'Incorreto';
-        resultMessage.textContent = 'Que pena, tente novamente na próxima!';
-        pointsEarned.textContent = '0 pontos';
+        title.textContent = "Incorreto 😔";
+        title.style.color = "#e53e3e";
+        msg.textContent = result.message || "Não foi dessa vez.";
+        pts.textContent = "0 pontos";
     }
-    
-    timeTaken.textContent = `Tempo: ${result.timeTaken}s`;
-    
-    // Atualizar pontuação
-    document.getElementById('currentScore').textContent = totalScore;
-    
+
+    if (timeDisplay) timeDisplay.textContent = `Tempo: ${result.timeTaken || '-'}s`;
+
     showScreen(resultScreen);
 }
 
-// Mostrar ranking
-function showRanking(rankingData) {
-    const rankingList = document.getElementById('rankingList');
-    
-    rankingList.innerHTML = rankingData.teams.map((team, index) => {
-        let positionClass = '';
-        if (index === 0) positionClass = 'first';
-        else if (index === 1) positionClass = 'second';
-        else if (index === 2) positionClass = 'third';
-        
-        return `
-            <div class="ranking-item ${positionClass}">
-                <div class="ranking-position">${index + 1}</div>
-                <div class="ranking-info">
-                    <div class="ranking-name">${team.name}</div>
-                </div>
-                <div class="ranking-score">${team.score} pts</div>
-            </div>
-        `;
-    }).join('');
-    
-    // Encontrar posição do seu time
-    const yourTeamIndex = rankingData.teams.findIndex(t => t.id === teamId);
-    const yourTeam = rankingData.teams[yourTeamIndex];
-    
-    if (yourTeam) {
-        document.getElementById('yourTeamRanking').textContent = `${yourTeamIndex + 1}º lugar - ${yourTeam.name}`;
-        document.getElementById('yourScoreRanking').textContent = yourTeam.score;
-    }
-    
-    showScreen(rankingScreen);
-}
-
-// Mostrar tela de fim
 function showEndScreen() {
     document.getElementById('finalScore').textContent = totalScore;
-    document.getElementById('finalTeam').textContent = teamName;
-    
+    document.getElementById('finalTeam').textContent = teamName || 'Seu Time';
+
     showScreen(endScreen);
 }
 
-// Mostrar tela específica
 function showScreen(screen) {
-    // Esconder todas as telas
-    document.querySelectorAll('.screen').forEach(s => {
-        s.classList.remove('active');
-    });
-    
-    // Mostrar tela específica
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     screen.classList.add('active');
-}
-
-// Mostrar erro
-function showError(message) {
-    const errorEl = document.getElementById('loginError');
-    if (errorEl) {
-        errorEl.textContent = message;
-    } else {
-        alert(message);
-    }
 }

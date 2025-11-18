@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - Sistema Quiz</title>
     <link rel="stylesheet" href="/css/admin.css">
 </head>
+
 <body>
     <div class="container">
         <header class="header">
@@ -24,7 +26,10 @@
         <!-- Gerenciamento do Jogo Selecionado -->
         <section id="gameManagement" class="section hidden">
             <div class="game-header">
-                <h2 id="gameTitle"></h2>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button id="btnBackToGames" class="btn btn-secondary" style="padding: 5px 10px;">← Voltar</button>
+                    <h2 id="gameTitle" style="margin: 0;"></h2>
+                </div>
                 <span id="gameStatus" class="badge"></span>
             </div>
 
@@ -58,7 +63,8 @@
                     <h3>Controle do Jogo</h3>
                     <div class="control-actions">
                         <button id="btnStartGame" class="btn btn-success btn-large">Iniciar Jogo</button>
-                        <button id="btnNextQuestion" class="btn btn-primary btn-large" disabled>Próxima Pergunta</button>
+                        <button id="btnNextQuestion" class="btn btn-primary btn-large" disabled>Próxima
+                            Pergunta</button>
                         <button id="btnShowRanking" class="btn btn-info btn-large" disabled>Mostrar Ranking</button>
                         <button id="btnEndGame" class="btn btn-danger btn-large" disabled>Finalizar Jogo</button>
                     </div>
@@ -186,4 +192,5 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/admin.js"></script>
 </body>
+
 </html>

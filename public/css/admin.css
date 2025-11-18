@@ -510,21 +510,30 @@ body {
         flex-direction: column;
         gap: 15px;
     }
-    
+
     .games-grid,
     .teams-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .form-row {
         grid-template-columns: 1fr;
     }
-    
+
     .control-actions {
         flex-direction: column;
     }
-    
+
     .btn-large {
         width: 100%;
     }
+}
+
+.qr-code {
+    display: block;
+    width: 120px;
+    height: 120px;
+    margin: 10px auto;
+    border-radius: 8px;
+    border: 2px solid #e2e8f0;
 }

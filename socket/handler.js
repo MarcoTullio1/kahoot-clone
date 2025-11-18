@@ -1,13 +1,18 @@
 const Game = require('../models/Game');
 const Team = require('../models/Team');
 const Participant = require('../models/Participant');
+const { pool } = require('../config/database'); // Importando pool para contar participantes
 
 module.exports = (io) => {
-  // Armazenar informações de sessão
+  // Armazenar informações de sessão (Timer, Estado do jogo)
   const activeGames = new Map();
 
   io.on('connection', (socket) => {
     console.log(`✅ Cliente conectado: ${socket.id}`);
+
+    // ----------------------------------------------------------------
+    // EVENTOS DO ADMINISTRADOR
+    // ----------------------------------------------------------------
 
     // Admin: Conectar ao jogo
     socket.on('admin:connect', async (gameId) => {
@@ -29,6 +34,7 @@ module.exports = (io) => {
         const game = await Game.findById(gameId);
         if (game.questions.length > 0) {
           const question = game.questions[0];
+
           const questionData = {
             id: question.id,
             text: question.question_text,
@@ -38,19 +44,19 @@ module.exports = (io) => {
             totalQuestions: game.questions.length
           };
 
-          // Enviar para participantes (sem mostrar resposta correta)
+          // Enviar para participantes (sem resposta correta)
           io.to(`game:${gameId}`).emit('question:new', questionData);
 
-          // Enviar para telão (sem mostrar resposta correta)
+          // Enviar para telão (sem resposta correta)
           io.to(`game:${gameId}:display`).emit('question:new', questionData);
 
-          // Enviar para admin (com resposta correta)
+          // Enviar para admin (COM resposta correta para controle)
           io.to(`game:${gameId}:admin`).emit('question:new', {
             ...questionData,
             correctAnswerId: question.answers.find(a => a.is_correct)?.id
           });
 
-          // Iniciar timer
+          // Iniciar controle de timer no servidor
           activeGames.set(gameId, {
             currentQuestionId: question.id,
             startTime: Date.now(),
@@ -82,19 +88,13 @@ module.exports = (io) => {
             totalQuestions: game.questions.length
           };
 
-          // Enviar para participantes
           io.to(`game:${gameId}`).emit('question:new', questionData);
-
-          // Enviar para telão
           io.to(`game:${gameId}:display`).emit('question:new', questionData);
-
-          // Enviar para admin
           io.to(`game:${gameId}:admin`).emit('question:new', {
             ...questionData,
             correctAnswerId: question.answers.find(a => a.is_correct)?.id
           });
 
-          // Atualizar timer
           activeGames.set(gameId, {
             currentQuestionId: question.id,
             startTime: Date.now(),
@@ -111,21 +111,28 @@ module.exports = (io) => {
       try {
         const teams = await Team.findByGameId(gameId);
 
-        // Recalcular pontuação de cada time
+        // Recalcular pontuação e estatísticas de cada time
         const teamsWithScores = await Promise.all(
           teams.map(async (team) => {
             const totalScore = await Team.calculateTotalScore(team.id);
             const participants = await Participant.findByTeamId(team.id);
+
+            // --- CORREÇÃO: Pegar estatísticas de acerto ---
+            // Se der erro aqui, verifique se colou o getStats no Team.js
+            const stats = await Team.getStats(team.id);
+            // ----------------------------------------------
+
             return {
               id: team.id,
               name: team.name,
               score: totalScore,
-              participantCount: participants.length
+              participantCount: participants.length,
+              accuracy: stats.percentage // Envia a % correta
             };
           })
         );
 
-        // Ordenar por pontuação
+        // Ordenar por pontuação (Maior para menor)
         teamsWithScores.sort((a, b) => b.score - a.score);
 
         const rankingData = {
@@ -133,11 +140,13 @@ module.exports = (io) => {
           timestamp: Date.now()
         };
 
-        // Enviar para telão e admin
+        // Enviar para todos
         io.to(`game:${gameId}:display`).emit('ranking:show', rankingData);
         io.to(`game:${gameId}:admin`).emit('ranking:show', rankingData);
         io.to(`game:${gameId}`).emit('ranking:show', rankingData);
+
       } catch (error) {
+        console.error("Erro no ranking:", error);
         socket.emit('error', { message: error.message });
       }
     });
@@ -154,24 +163,25 @@ module.exports = (io) => {
       }
     });
 
+    // ----------------------------------------------------------------
+    // EVENTOS DO PARTICIPANTE
+    // ----------------------------------------------------------------
+
     // Participante: Entrar no jogo
-    // Participante: Entrar no jogo (VERSÃO CORRIGIDA)
+    // Participante: Entrar no jogo (ATUALIZADO COM PONTUAÇÃO)
     socket.on('participant:join', async ({ teamId, nickname }) => {
       try {
-        // 1. Busca o time de forma segura
-        // Nota: Baseado no Team.js que te passei, isso retorna um Objeto, não um Array
         const team = await Team.findByTeamId(teamId);
-
         if (!team) {
           socket.emit('error', { message: 'Time não encontrado!' });
           return;
         }
 
-        // 2. Cria o participante
         const participantId = await Participant.create(teamId, nickname, socket.id);
-
-        // 3. Pega o ID do jogo direto do time
         const gameId = team.game_id;
+
+        const currentScore = 0;
+
 
         if (gameId) {
           socket.join(`game:${gameId}`);
@@ -182,21 +192,26 @@ module.exports = (io) => {
           socket.emit('participant:joined', {
             participantId,
             teamId,
-            nickname
+            nickname,
+            score: currentScore // Envia a pontuação inicial
           });
 
           // Notificar admin
-          io.to(`game:${gameId}:admin`).emit('participant:new', {
-            participantId,
-            teamId,
-            nickname
-          });
+          io.to(`game:${gameId}:admin`).emit('participant:new', { participantId, teamId, nickname });
 
-          console.log(`👤 Participante ${nickname} entrou no time ${team.name} (ID: ${teamId})`);
+          // Contagem real
+          const [countResult] = await pool.execute(
+            `SELECT COUNT(*) as total FROM participants 
+             JOIN teams ON participants.team_id = teams.id 
+             WHERE teams.game_id = ?`,
+            [gameId]
+          );
+          const realCount = countResult[0].total;
+          io.to(`game:${gameId}:display`).emit('participant:update_count', realCount);
         }
       } catch (error) {
         console.error('Erro no join:', error);
-        socket.emit('error', { message: 'Erro ao entrar no jogo: ' + error.message });
+        socket.emit('error', { message: error.message });
       }
     });
 
@@ -206,20 +221,26 @@ module.exports = (io) => {
         const gameState = activeGames.get(socket.gameId);
 
         if (!gameState) {
-          return socket.emit('error', { message: 'Jogo não está ativo' });
+          // Se o jogo não estiver ativo na memória do servidor, permite responder mas sem validar tempo rigoroso
+          // ou retorna erro. Aqui optamos por avisar.
+          // return socket.emit('error', { message: 'Jogo não está ativo ou pergunta já encerrou' });
         }
 
         // Calcular tempo decorrido
-        const timeTaken = (Date.now() - gameState.startTime) / 1000; // em segundos
+        let timeTaken = 0;
+        if (gameState) {
+          timeTaken = (Date.now() - gameState.startTime) / 1000;
 
-        if (timeTaken > gameState.timeLimit) {
-          return socket.emit('answer:result', {
-            success: false,
-            message: 'Tempo esgotado'
-          });
+          // Tolerância de 2 segundos para delay de rede
+          if (timeTaken > (gameState.timeLimit + 2)) {
+            return socket.emit('answer:result', {
+              success: false,
+              message: 'Tempo esgotado'
+            });
+          }
         }
 
-        // Registrar resposta
+        // Registrar resposta no banco
         const result = await Participant.submitAnswer(
           participantId,
           questionId,
@@ -228,6 +249,7 @@ module.exports = (io) => {
         );
 
         if (result) {
+          // Enviar resultado para o participante (Feedback imediato)
           socket.emit('answer:result', {
             success: true,
             isCorrect: result.isCorrect,
@@ -235,7 +257,7 @@ module.exports = (io) => {
             timeTaken: timeTaken.toFixed(2)
           });
 
-          // Notificar admin sobre a resposta
+          // Notificar admin (para mostrar progresso em tempo real, se quiser implementar depois)
           io.to(`game:${socket.gameId}:admin`).emit('participant:answered', {
             participantId,
             questionId,
@@ -244,19 +266,39 @@ module.exports = (io) => {
           });
         }
       } catch (error) {
+        console.error("Erro ao responder:", error);
         socket.emit('error', { message: error.message });
       }
     });
+
+    // ----------------------------------------------------------------
+    // EVENTOS DO TELÃO
+    // ----------------------------------------------------------------
 
     // Telão: Conectar ao jogo
     socket.on('display:connect', async (gameId) => {
       socket.join(`game:${gameId}:display`);
       socket.gameId = gameId;
       console.log(`📺 Telão conectado ao jogo ${gameId}`);
+
+      // Ao conectar, enviar contagem atual de participantes para não ficar zerado
+      try {
+        const [countResult] = await pool.execute(
+          `SELECT COUNT(*) as total FROM participants 
+             JOIN teams ON participants.team_id = teams.id 
+             WHERE teams.game_id = ?`,
+          [gameId]
+        );
+        const realCount = countResult[0].total;
+        socket.emit('participant:update_count', realCount);
+      } catch (e) {
+        console.error("Erro ao buscar contagem inicial:", e);
+      }
     });
 
     // Desconexão
     socket.on('disconnect', () => {
+      // Opcional: Se quiser diminuir o contador quando alguém sai, teria que implementar lógica de remoção
       console.log(`❌ Cliente desconectado: ${socket.id}`);
     });
   });

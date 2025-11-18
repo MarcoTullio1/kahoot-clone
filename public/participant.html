@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Participante - Quiz</title>
     <link rel="stylesheet" href="/css/participant.css">
 </head>
+
 <body>
     <div class="container">
         <!-- Tela de Login -->
@@ -13,7 +15,7 @@
             <div class="login-box">
                 <div class="logo">
                     <svg width="80" height="80" viewBox="0 0 100 100">
-                        <circle cx="50" cy="50" r="45" fill="#667eea"/>
+                        <circle cx="50" cy="50" r="45" fill="#667eea" />
                         <text x="50" y="65" text-anchor="middle" fill="white" font-size="50" font-weight="bold">Q</text>
                     </svg>
                 </div>
@@ -32,7 +34,7 @@
             <div class="waiting-box">
                 <div class="pulse-animation">
                     <svg width="100" height="100" viewBox="0 0 100 100">
-                        <circle cx="50" cy="50" r="45" fill="#667eea"/>
+                        <circle cx="50" cy="50" r="45" fill="#667eea" />
                         <text x="50" y="65" text-anchor="middle" fill="white" font-size="50" font-weight="bold">Q</text>
                     </svg>
                 </div>
@@ -57,12 +59,13 @@
                     <div class="question-number">
                         Pergunta <span id="currentQuestionNum">1</span> de <span id="totalQuestions">10</span>
                     </div>
+
                     <div class="timer-container">
-                        <svg class="timer-circle" width="60" height="60">
-                            <circle class="timer-bg" cx="30" cy="30" r="25"/>
-                            <circle class="timer-progress" cx="30" cy="30" r="25"/>
+                        <svg class="timer-svg" width="60" height="60">
+                            <circle class="timer-bg" cx="30" cy="30" r="25"></circle>
+                            <circle class="timer-progress" cx="30" cy="30" r="25"></circle>
                         </svg>
-                        <span class="timer-text" id="timer">30</span>
+                        <div class="timer-text" id="timer">30</div>
                     </div>
                 </div>
 
@@ -71,7 +74,6 @@
                 </div>
 
                 <div class="answers-grid" id="answersContainer">
-                    <!-- Respostas serão inseridas aqui -->
                 </div>
             </div>
         </div>
@@ -127,4 +129,5 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/participant.js"></script>
 </body>
+
 </html>

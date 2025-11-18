@@ -95,6 +95,31 @@ class Team {
   static async findByTeamId(teamId) {
     return await this.findById(teamId);
   }
+
+  static async getStats(teamId) {
+    const [totalRes] = await pool.execute(
+      `SELECT COUNT(*) as total FROM participant_answers 
+       JOIN participants ON participant_answers.participant_id = participants.id 
+       WHERE participants.team_id = ?`,
+      [teamId]
+    );
+
+    const [correctRes] = await pool.execute(
+      `SELECT COUNT(*) as correct FROM participant_answers 
+       JOIN participants ON participant_answers.participant_id = participants.id 
+       WHERE participants.team_id = ? AND participant_answers.points_earned > 0`,
+      [teamId]
+    );
+
+    const total = parseInt(totalRes[0].total) || 0;
+    const correct = parseInt(correctRes[0].correct) || 0;
+
+    const percentage = total === 0 ? 0 : Math.round((correct / total) * 100);
+
+    return { total, correct, percentage };
+  }
+
 }
 
 module.exports = Team;
+
