@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Participante - Quiz</title>
+    <link rel="stylesheet" href="/css/participant.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Tela de Login -->
+        <div id="loginScreen" class="screen active">
+            <div class="login-box">
+                <div class="logo">
+                    <svg width="80" height="80" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="45" fill="#667eea"/>
+                        <text x="50" y="65" text-anchor="middle" fill="white" font-size="50" font-weight="bold">Q</text>
+                    </svg>
+                </div>
+                <h1>Bem-vindo ao Quiz!</h1>
+                <p class="subtitle">Digite seu nome ou apelido para começar</p>
+                <form id="formLogin">
+                    <input type="text" id="nickname" placeholder="Seu nome ou apelido" required autofocus>
+                    <button type="submit" class="btn btn-primary">Entrar</button>
+                </form>
+                <div id="loginError" class="error-message"></div>
+            </div>
+        </div>
+
+        <!-- Tela de Espera -->
+        <div id="waitingScreen" class="screen">
+            <div class="waiting-box">
+                <div class="pulse-animation">
+                    <svg width="100" height="100" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="45" fill="#667eea"/>
+                        <text x="50" y="65" text-anchor="middle" fill="white" font-size="50" font-weight="bold">Q</text>
+                    </svg>
+                </div>
+                <h2>Olá, <span id="participantName"></span>!</h2>
+                <p class="waiting-text">Aguardando o início do jogo...</p>
+                <div class="team-info">
+                    <p>Time: <strong id="teamName"></strong></p>
+                    <p>Sua pontuação: <strong id="currentScore">0</strong> pontos</p>
+                </div>
+                <div class="loading-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Pergunta -->
+        <div id="questionScreen" class="screen">
+            <div class="question-container">
+                <div class="question-header">
+                    <div class="question-number">
+                        Pergunta <span id="currentQuestionNum">1</span> de <span id="totalQuestions">10</span>
+                    </div>
+                    <div class="timer-container">
+                        <svg class="timer-circle" width="60" height="60">
+                            <circle class="timer-bg" cx="30" cy="30" r="25"/>
+                            <circle class="timer-progress" cx="30" cy="30" r="25"/>
+                        </svg>
+                        <span class="timer-text" id="timer">30</span>
+                    </div>
+                </div>
+
+                <div class="question-text" id="questionText">
+                    Carregando pergunta...
+                </div>
+
+                <div class="answers-grid" id="answersContainer">
+                    <!-- Respostas serão inseridas aqui -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Resultado da Resposta -->
+        <div id="resultScreen" class="screen">
+            <div class="result-box">
+                <div class="result-icon" id="resultIcon">
+                    <!-- Ícone será inserido aqui -->
+                </div>
+                <h2 id="resultTitle"></h2>
+                <div class="result-details">
+                    <p id="resultMessage"></p>
+                    <div class="points-earned" id="pointsEarned"></div>
+                    <div class="time-taken" id="timeTaken"></div>
+                </div>
+                <p class="waiting-next">Aguardando próxima pergunta...</p>
+            </div>
+        </div>
+
+        <!-- Tela de Ranking -->
+        <div id="rankingScreen" class="screen">
+            <div class="ranking-box">
+                <h2>Ranking Atual</h2>
+                <div id="rankingList" class="ranking-list">
+                    <!-- Ranking será inserido aqui -->
+                </div>
+                <div class="your-position">
+                    <p>Seu time: <strong id="yourTeamRanking"></strong></p>
+                    <p>Pontuação: <strong id="yourScoreRanking"></strong> pontos</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Fim de Jogo -->
+        <div id="endScreen" class="screen">
+            <div class="end-box">
+                <div class="trophy-icon">
+                    <svg width="120" height="120" viewBox="0 0 100 100">
+                        <text x="50" y="65" text-anchor="middle" font-size="80">🏆</text>
+                    </svg>
+                </div>
+                <h2>Jogo Finalizado!</h2>
+                <div class="final-stats">
+                    <p>Sua pontuação final: <strong id="finalScore">0</strong> pontos</p>
+                    <p>Time: <strong id="finalTeam"></strong></p>
+                </div>
+                <p class="thank-you">Obrigado por participar!</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/participant.js"></script>
+</body>
+</html>

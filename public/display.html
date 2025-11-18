@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telão - Quiz</title>
+    <link rel="stylesheet" href="/css/display.css">
+</head>
+<body>
+    <div class="display-container">
+        <!-- Tela de Seleção de Jogo -->
+        <div id="selectGameScreen" class="screen active">
+            <div class="select-game-box">
+                <h1 class="main-title">Sistema Quiz</h1>
+                <p class="subtitle">Selecione o jogo para projetar</p>
+                <div id="gamesListDisplay" class="games-list-display"></div>
+            </div>
+        </div>
+
+        <!-- Tela de Aguardando Início -->
+        <div id="waitingStartScreen" class="screen">
+            <div class="waiting-content">
+                <div class="logo-display pulse">
+                    <svg width="200" height="200" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="45" fill="#667eea"/>
+                        <text x="50" y="70" text-anchor="middle" fill="white" font-size="60" font-weight="bold">Q</text>
+                    </svg>
+                </div>
+                <h1 class="game-name" id="displayGameName"></h1>
+                <h2 class="waiting-message">Aguardando início do jogo...</h2>
+                <div class="participants-count">
+                    <span id="participantsCount">0</span> participantes conectados
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Pergunta -->
+        <div id="questionDisplayScreen" class="screen">
+            <div class="question-display-content">
+                <div class="question-header-display">
+                    <div class="question-info">
+                        <span class="question-label">PERGUNTA</span>
+                        <span class="question-counter">
+                            <span id="displayQuestionNum">1</span>/<span id="displayTotalQuestions">10</span>
+                        </span>
+                    </div>
+                    <div class="timer-display">
+                        <svg class="timer-circle-large" width="120" height="120">
+                            <circle class="timer-bg-large" cx="60" cy="60" r="50"/>
+                            <circle class="timer-progress-large" cx="60" cy="60" r="50"/>
+                        </svg>
+                        <span class="timer-text-large" id="displayTimer">30</span>
+                    </div>
+                </div>
+
+                <div class="question-text-display" id="displayQuestionText">
+                    Carregando pergunta...
+                </div>
+
+                <div class="answers-display-grid" id="displayAnswersContainer">
+                    <!-- Respostas serão inseridas aqui -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Ranking -->
+        <div id="rankingDisplayScreen" class="screen">
+            <div class="ranking-display-content">
+                <h1 class="ranking-title">
+                    <span class="trophy-icon">🏆</span>
+                    RANKING
+                </h1>
+                
+                <div id="displayRankingList" class="ranking-display-list">
+                    <!-- Ranking será inserido aqui -->
+                </div>
+
+                <div class="ranking-footer">
+                    <p>Aguardando próxima pergunta...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Fim de Jogo -->
+        <div id="endDisplayScreen" class="screen">
+            <div class="end-display-content">
+                <h1 class="end-title">JOGO FINALIZADO!</h1>
+                
+                <div class="podium">
+                    <div class="podium-item second" id="secondPlace">
+                        <div class="podium-medal">🥈</div>
+                        <div class="podium-position">2º</div>
+                        <div class="podium-team"></div>
+                        <div class="podium-score"></div>
+                        <div class="podium-bar"></div>
+                    </div>
+                    
+                    <div class="podium-item first" id="firstPlace">
+                        <div class="podium-medal">🏆</div>
+                        <div class="podium-position">1º</div>
+                        <div class="podium-team"></div>
+                        <div class="podium-score"></div>
+                        <div class="podium-bar"></div>
+                    </div>
+                    
+                    <div class="podium-item third" id="thirdPlace">
+                        <div class="podium-medal">🥉</div>
+                        <div class="podium-position">3º</div>
+                        <div class="podium-team"></div>
+                        <div class="podium-score"></div>
+                        <div class="podium-bar"></div>
+                    </div>
+                </div>
+
+                <div class="congratulations">
+                    <h2>Parabéns a todos os participantes!</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/display.js"></script>
+</body>
+</html>
