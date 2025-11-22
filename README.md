@@ -62,16 +62,19 @@ CREATE TABLE IF NOT EXISTS participant_answers (
 #### ✔ Opção B — MySQL local / XAMPP
 
 1. Crie o banco:
+
    ```sql
    kahoot_system
    ```
 
 2. Importe:
+
    ```
    scripts/database-schema.sql
    ```
 
 3. Execute também:
+
    ```sql
    CREATE TABLE IF NOT EXISTS participant_answers (
      id INT AUTO_INCREMENT PRIMARY KEY,
@@ -129,3 +132,30 @@ PORT=3000
 - Responder com rapidez ⚡ para ganhar mais pontos
 
 ---
+
+# Guia de Deploy na AWS Free Tier ☁️
+
+Este guia cobre a hospedagem completa do sistema Kahoot Clone usando serviços gratuitos da AWS (EC2 e RDS).
+
+## 1. Banco de Dados (AWS RDS)
+
+1. Acesse o **AWS Console** e vá para o serviço **RDS**.
+2. Clique em **Create database**.
+3. Escolha **Standard create** > **MySQL**.
+4. Em **Templates**, selecione **Free tier**.
+5. **Settings**:
+    - **DB Instance Identifier**: `kahoot-db`
+    - **Username**: `admin`
+    - **Password**: Crie uma senha forte
+6. **Connectivity**:
+    - **Public access**: Selecione **Yes** (Para facilitar a conexão inicial).
+    - **VPC Security Group**: Create new (Nome: `kahoot-db-sg`).
+7. Clique em **Create database**.
+8. Após criar, clique no banco e copie o **Endpoint** (ex: `kahoot-db.xyz.us-east-1.rds.amazonaws.com`).
+
+### Configurar Tabelas
+
+Do seu computador, conecte ao banco remoto e crie as tabelas:
+
+```bash
+mysql -h SEU_ENDPOINT_RDS -u admin -p < scripts/database-schema.sql
