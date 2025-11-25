@@ -1,6 +1,5 @@
 const { pool } = require('../config/database');
 const QRCode = require('qrcode');
-const axios = require('axios'); // Biblioteca para chamar a API
 
 class Team {
   // Criar novo time
@@ -15,31 +14,12 @@ class Team {
 
     const teamId = result.insertId;
 
-    // Montar a URL original (IP)
+    // Montar a URL usando seu domínio configurado no .env
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-    const longUrl = `${baseUrl}/participant.html?code=${accessCode}`;
+    const participantUrl = `${baseUrl}/participant.html?code=${accessCode}`;
 
-    // --- AUTOMATIZAÇÃO DO ENCURTADOR ---
-    let finalUrl = longUrl;
-
-    try {
-      // Chama a API do TinyURL para encurtar
-      const response = await axios.get(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`, {
-        timeout: 5000 // Espera no máximo 5 segundos
-      });
-
-      if (response.data && response.data.startsWith('http')) {
-        finalUrl = response.data; // Usa o link curto (ex: https://tinyurl.com/y3x...)
-        console.log(`Link encurtado com sucesso: ${finalUrl}`);
-      }
-    } catch (error) {
-      console.error('Falha ao encurtar link (usando original):', error.message);
-      // Se der erro, o finalUrl continua sendo o longUrl (IP), então o sistema não quebra
-    }
-    // -----------------------------------
-
-    // Gerar QR Code com o link (encurtado ou original)
-    const qrCodeDataUrl = await QRCode.toDataURL(finalUrl);
+    // Gerar QR Code direto com seu link
+    const qrCodeDataUrl = await QRCode.toDataURL(participantUrl);
 
     // Salvar QR Code no banco
     await pool.execute(
@@ -86,7 +66,7 @@ class Team {
     );
   }
 
-  // Calcular pontuação total do time (soma de todos os participantes)
+  // Calcular pontuação total do time
   static async calculateTotalScore(teamId) {
     const [result] = await pool.execute(
       'SELECT SUM(total_score) as total FROM participants WHERE team_id = ?',
@@ -102,7 +82,7 @@ class Team {
     await pool.execute('DELETE FROM teams WHERE id = ?', [teamId]);
   }
 
-  // Obter estatísticas
+  // Estatísticas
   static async getStats(teamId) {
     const [totalRes] = await pool.execute(
       `SELECT COUNT(*) as total FROM participant_answers 
@@ -120,12 +100,12 @@ class Team {
 
     const total = parseInt(totalRes[0].total) || 0;
     const correct = parseInt(correctRes[0].correct) || 0;
+
     const percentage = total === 0 ? 0 : Math.round((correct / total) * 100);
 
     return { total, correct, percentage };
   }
 
-  // Busca genérica
   static async findById(teamId) {
     const [teams] = await pool.execute(
       'SELECT * FROM teams WHERE id = ?',
