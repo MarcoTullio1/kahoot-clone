@@ -77,7 +77,11 @@ module.exports = (io) => {
     });
 
     socket.on('admin:showStats', (gameId) => sendStats(gameId));
-    socket.on('admin:showRanking', async (gameId) => sendRanking(gameId));
+    socket.on('admin:showRanking', async (gameId) => {
+      const game = await Game.findById(gameId);
+      const isFinal = game && game.status === 'finished'; // Verifica se acabou
+      sendRanking(gameId, isFinal); // Passa o aviso
+    });
     socket.on('admin:endGame', async (gameId) => finishGame(gameId));
 
     // --- PARTICIPANTE ---
@@ -272,8 +276,7 @@ module.exports = (io) => {
         }
       }
     }
-
-    async function sendRanking(gameId) {
+    async function sendRanking(gameId, isFinal = false) { // <--- Adicione isFinal = false
       const teams = await Team.findByGameId(gameId);
       const ranking = await Promise.all(teams.map(async t => {
         const score = await Team.calculateTotalScore(t.id);
@@ -281,9 +284,19 @@ module.exports = (io) => {
         return { id: t.id, name: t.name, score, accuracy: stats.percentage };
       }));
       ranking.sort((a, b) => b.score - a.score);
-      io.to(`game:${gameId}`).emit('ranking:show', { teams: ranking, timestamp: Date.now() });
-    }
 
+      // MUDANÇA AQUI: Adicionar isFinal no envio
+      const rankingData = {
+        teams: ranking,
+        timestamp: Date.now(),
+        isFinal: isFinal
+      };
+
+      // Envia o objeto novo
+      io.to(`game:${gameId}`).emit('ranking:show', rankingData);
+      // IMPORTANTE: Adicionar envio explícito para o display também se não estiver no grupo acima
+      io.to(`game:${gameId}:display`).emit('ranking:show', rankingData);
+    }
     async function finishGame(gameId) {
       await Game.updateStatus(gameId, 'finished');
       io.to(`game:${gameId}`).emit('game:ended');

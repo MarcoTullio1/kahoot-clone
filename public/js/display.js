@@ -2,44 +2,61 @@ const socket = io();
 let currentGameId = null;
 let currentGame = null;
 let timerInterval = null;
+let gameFinished = false;
 
 // Elementos DOM
 const waitingStartScreen = document.getElementById('waitingStartScreen');
 const questionDisplayScreen = document.getElementById('questionDisplayScreen');
 const rankingDisplayScreen = document.getElementById('rankingDisplayScreen');
 const endDisplayScreen = document.getElementById('endDisplayScreen');
+// Adicione isso no topo com as outras consts
+const rankingList = document.getElementById('rankingList');
 
 document.addEventListener('DOMContentLoaded', () => {
     loadGames();
     setupSocketListeners();
 });
+
 function setupSocketListeners() {
-    socket.on('game:started', () => console.log('Jogo iniciado!'));
+    socket.on('game:started', () => {
+        console.log('Jogo iniciado!');
+        gameFinished = false; // Reset flag
+    });
 
     socket.on('question:new', (questionData) => {
-        console.log('Pergunta nova...');
+        console.log('Pergunta nova recebida:', questionData);
         showQuestion(questionData);
     });
 
     socket.on('ranking:show', (rankingData) => {
-        console.log('Recebi ordem de Ranking:', rankingData);
+        console.log('📊 Evento ranking:show recebido:', rankingData);
+        console.log('🎮 gameFinished flag:', gameFinished);
+        console.log('🎮 rankingData.isFinal:', rankingData.isFinal);
+
         // Força a parada de qualquer timer
         stopTimer();
+
         // Chama a função de exibição diretamente
         showRanking(rankingData);
     });
 
     socket.on('game:ended', () => {
-        console.log('Jogo acabou. Indo para o pódio...');
-        if (currentGame) currentGame.status = 'finished';
+        console.log('🏁 Jogo finalizado recebido no display');
+        gameFinished = true; // <--- MARCA QUE ACABOU
 
-        // Pequeno delay e pede o ranking final
+        if (typeof currentGame !== 'undefined') {
+            currentGame.status = 'finished';
+        }
+
+        // Espera um pouco e pede o ranking final automaticamente
         setTimeout(() => {
+            // Certifique-se que você tem acesso ao socket e ao ID do jogo aqui
             socket.emit('admin:showRanking', currentGameId);
         }, 500);
     });
 
     socket.on('question:stats', (data) => {
+        console.log('📈 Estatísticas da pergunta recebidas');
         stopTimer();
         renderStatsChart(data);
     });
@@ -60,7 +77,9 @@ async function loadGames() {
         const response = await fetch('/api/admin/games');
         const data = await response.json();
         if (data.success) renderGamesList(data.games);
-    } catch (error) { console.error(error); }
+    } catch (error) {
+        console.error('Erro ao carregar jogos:', error);
+    }
 }
 
 function renderGamesList(games) {
@@ -79,17 +98,27 @@ function renderGamesList(games) {
 
 async function selectGame(gameId, gameName) {
     currentGameId = gameId;
+    gameFinished = false; // Reset ao selecionar novo jogo
+
     try {
         const response = await fetch(`/api/admin/games/${gameId}`);
         const data = await response.json();
         if (data.success) {
             currentGame = data.game;
+
+            // Verifica se o jogo já está finalizado
+            if (currentGame.status === 'finished') {
+                gameFinished = true;
+            }
+
             socket.emit('display:connect', gameId);
 
             document.getElementById('displayGameName').textContent = gameName;
             showScreen(waitingStartScreen);
         }
-    } catch (error) { console.error(error); }
+    } catch (error) {
+        console.error('Erro ao selecionar jogo:', error);
+    }
 }
 
 function showQuestion(questionData) {
@@ -167,9 +196,9 @@ function renderStatsChart(data) {
     // Configura layout do container principal
     container.style.display = 'flex';
     container.style.flexDirection = 'row';
-    container.style.alignItems = 'flex-end'; // Garante que as colunas comecem de baixo
+    container.style.alignItems = 'flex-end';
     container.style.justifyContent = 'space-around';
-    container.style.height = '500px'; // Aumentei um pouco
+    container.style.height = '500px';
     container.style.padding = '20px';
     container.style.gap = '15px';
 
@@ -179,9 +208,8 @@ function renderStatsChart(data) {
     container.innerHTML = data.distribution.map((item, index) => {
         const checkIcon = item.isCorrect ?
             `<div style="margin-bottom: 10px; font-size: 2.5rem; background: white; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 10;">✅</div>`
-            : '<div style="height: 60px;"></div>'; // Espaço vazio para manter alinhamento
+            : '<div style="height: 60px;"></div>';
 
-        // Altura da barra (mínimo 5% para aparecer)
         const barHeight = Math.max(5, item.percent);
         const opacity = item.isCorrect ? '1' : '0.6';
 
@@ -206,25 +234,35 @@ function renderStatsChart(data) {
     }).join('');
 }
 function showRanking(rankingData) {
-    stopTimer();
+    // Para qualquer timer que esteja rodando
+    if (typeof stopTimer === 'function') stopTimer();
 
-    // Verifica se é o final (Pódio)
-    // ADICIONAMOS: Verifica também se o Admin mandou um flag de 'final' nos dados (se possível)
-    // Por enquanto confiamos no status local
-    if (currentGame && currentGame.status === 'finished') {
+    // Verificação tripla para garantir que é a final
+    const isFinalRanking = gameFinished ||
+        rankingData.isFinal === true ||
+        (typeof currentGame !== 'undefined' && currentGame && currentGame.status === 'finished');
+
+    console.log('🏆 Exibindo Ranking. É final?', isFinalRanking);
+
+    if (isFinalRanking) {
+        // Mostra o PÓDIO
         showFinalRanking(rankingData);
     } else {
-        // Ranking Parcial
-        const rankingList = document.getElementById('displayRankingList');
-        if (rankingList) {
-            renderRankingList(rankingData.teams, rankingList);
-            showScreen(rankingDisplayScreen); // FORÇA A TROCA DE TELA AQUI
-        }
+        // Mostra a LISTA de classificação normal
+        renderRankingList(rankingData.teams, rankingList); // Ajuste os nomes das variáveis se necessário
+        showScreen(rankingDisplayScreen);
     }
 }
 function showFinalRanking(rankingData) {
+    console.log('🎊 Renderizando pódio com', rankingData.teams.length, 'times');
+
     const podiumContainer = document.querySelector('.podium');
-    if (podiumContainer) podiumContainer.innerHTML = '';
+    if (!podiumContainer) {
+        console.error('❌ Container do pódio não encontrado!');
+        return;
+    }
+
+    podiumContainer.innerHTML = '';
 
     const teams = rankingData.teams;
 
@@ -232,11 +270,16 @@ function showFinalRanking(rankingData) {
     if (teams.length > 1) renderPodiumItem(teams[1], 'second', podiumContainer);
     if (teams.length > 2) renderPodiumItem(teams[2], 'third', podiumContainer);
 
+    // FORÇA a exibição da tela final
     showScreen(endDisplayScreen);
+    console.log('✅ Tela do pódio exibida');
 }
 
 function renderPodiumItem(team, positionClass, container) {
     if (!team || !container) return;
+
+    console.log(`   Renderizando ${positionClass}:`, team.name, '-', team.score, 'pts');
+
     const div = document.createElement('div');
     div.className = `podium-item ${positionClass}`;
     div.innerHTML = `
@@ -274,6 +317,7 @@ function renderRankingList(teams, container) {
 }
 
 function showScreen(screen) {
+    console.log('🖥️ Trocando para tela:', screen.id);
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     screen.classList.add('active');
 }
