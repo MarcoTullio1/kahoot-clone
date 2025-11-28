@@ -5,6 +5,9 @@ let currentQuestionId = null;
 let timerInterval = null;
 let questionStartTime = null;
 
+// Variável global para guardar a pontuação
+let totalScore = 0;
+
 // Elementos DOM
 const loginScreen = document.getElementById('loginScreen');
 const waitingScreen = document.getElementById('waitingScreen');
@@ -27,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupSocketListeners() {
     socket.on('game:started', () => {
         console.log('Jogo começou!');
-        // Mantém na tela de espera até chegar a pergunta
     });
 
     socket.on('question:new', (questionData) => {
@@ -40,12 +42,23 @@ function setupSocketListeners() {
         showResult(result);
     });
 
+    // Adicionando listener para o ranking no celular também (aviso)
+    socket.on('ranking:show', (data) => {
+        showScreen(waitingScreen);
+        document.querySelector('#waitingScreen h2').textContent = "Olhe para o Telão!";
+        document.querySelector('#waitingScreen .waiting-text').textContent = "Ranking sendo exibido...";
+    });
+
     socket.on('game:ended', () => showEndScreen());
 
     socket.on('participant:joined', (data) => {
         participantId = data.participantId;
+        if (data.score !== undefined) totalScore = data.score;
+
         showScreen(waitingScreen);
         document.getElementById('participantName').textContent = data.nickname;
+        const scoreEl = document.getElementById('currentScore');
+        if (scoreEl) scoreEl.textContent = totalScore;
     });
 
     socket.on('error', (data) => alert('Erro: ' + data.message));
@@ -77,21 +90,18 @@ function handleLogin(e) {
 }
 
 function showQuestion(data) {
-    // 1. Prepara a tela
     document.getElementById('currentQuestionNum').textContent = data.questionNumber;
     document.getElementById('totalQuestions').textContent = data.totalQuestions;
     document.getElementById('questionText').textContent = data.text;
 
     const container = document.getElementById('answersContainer');
-    container.innerHTML = ''; // Limpa botões antigos
+    container.innerHTML = '';
 
     const letters = ['A', 'B', 'C', 'D'];
 
-    // 2. Cria os botões de forma segura (sem onclick no HTML)
     data.answers.forEach((answer, index) => {
         const btn = document.createElement('button');
         btn.className = 'answer-btn';
-        // Garante que o botão está habilitado ao nascer
         btn.disabled = false;
 
         btn.innerHTML = `
@@ -99,25 +109,20 @@ function showQuestion(data) {
             <span>${answer.text}</span>
         `;
 
-        // Adiciona o evento de clique
         btn.addEventListener('click', () => handleAnswerClick(answer.id, btn));
-
         container.appendChild(btn);
     });
 
     showScreen(questionScreen);
 
-    // 3. Inicia Timer
     currentQuestionId = data.id;
-    questionStartTime = Date.now(); // Marca a hora que a pergunta apareceu
+    questionStartTime = Date.now();
     startTimer(data.timeLimit);
 }
 
 function handleAnswerClick(answerId, btnElement) {
-    // 1. Trava cliques múltiplos
     if (btnElement.disabled) return;
 
-    // 2. Desabilita todos os botões visualmente
     const allBtns = document.querySelectorAll('.answer-btn');
     allBtns.forEach(b => {
         b.disabled = true;
@@ -125,16 +130,13 @@ function handleAnswerClick(answerId, btnElement) {
         b.style.cursor = 'default';
     });
 
-    // 3. Destaca o escolhido
     btnElement.classList.add('selected');
     btnElement.style.opacity = '1';
     btnElement.style.borderColor = '#667eea';
     btnElement.style.background = '#e0e7ff';
 
-    // 4. Para o timer
     stopTimer();
 
-    // 5. Envia para o servidor
     console.log('Enviando resposta...', answerId);
     socket.emit('participant:answer', {
         participantId,
@@ -144,13 +146,12 @@ function handleAnswerClick(answerId, btnElement) {
 }
 
 function startTimer(seconds) {
-    stopTimer(); // Garante que não tem timer antigo rodando
+    stopTimer();
 
     const textEl = document.getElementById('timer');
     const circle = document.querySelector('.timer-progress');
     let left = seconds;
 
-    // Configura visual inicial
     if (textEl) {
         textEl.textContent = left;
         textEl.style.color = '#2d3748';
@@ -177,12 +178,10 @@ function startTimer(seconds) {
 
         if (left <= 0) {
             stopTimer();
-            // Tempo acabou: desabilita tudo
             document.querySelectorAll('.answer-btn').forEach(b => b.disabled = true);
 
-            // Mostra tela de erro após 1s
+            // Só mostra tela de erro se ainda estiver na pergunta
             setTimeout(() => {
-                // Só mostra "Tempo esgotado" se o usuário ainda estiver nesta tela
                 if (document.getElementById('questionScreen').classList.contains('active')) {
                     showResult({ isCorrect: false, message: 'Tempo esgotado!', pointsEarned: 0, timeTaken: seconds });
                 }
@@ -199,28 +198,35 @@ function stopTimer() {
 }
 
 function showResult(result) {
-    const title = document.getElementById('resultTitle');
-    const msg = document.getElementById('resultMessage');
-    const pts = document.getElementById('pointsEarned');
+    const resultBox = document.querySelector('.result-box');
+    const resultIcon = document.getElementById('resultIcon');
+    const resultTitle = document.getElementById('resultTitle');
+    const resultMessage = document.getElementById('resultMessage');
+    const pointsEarned = document.getElementById('pointsEarned');
     const timeDisplay = document.getElementById('timeTaken');
 
-    if (result.isCorrect) {
-        title.textContent = "Correto! 🎉";
-        title.style.color = "#38a169";
-        msg.textContent = "Mandou bem!";
-        pts.textContent = `+${result.pointsEarned} pontos`;
+    resultBox.classList.remove('correct', 'incorrect');
 
-        // --- CORREÇÃO: Atualiza a variável global de pontuação ---
+    if (result.isCorrect) {
+        resultBox.classList.add('correct');
+        resultIcon.innerHTML = '<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#38a169" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
+        resultTitle.textContent = "Correto! 🎉";
+        resultTitle.style.color = "#38a169";
+        resultMessage.textContent = "Mandou bem!";
+        pointsEarned.textContent = `+${result.pointsEarned} pontos`;
+
         totalScore += result.pointsEarned;
-        // Atualiza também o mostrador da tela de espera para a próxima rodada
         document.getElementById('currentScore').textContent = totalScore;
-        // ---------------------------------------------------------
 
     } else {
-        title.textContent = "Incorreto 😔";
-        title.style.color = "#e53e3e";
-        msg.textContent = result.message || "Não foi dessa vez.";
-        pts.textContent = "0 pontos";
+        resultBox.classList.add('incorrect');
+        resultIcon.innerHTML = '<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#e53e3e" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+        resultTitle.textContent = "Incorreto 😔";
+        resultTitle.style.color = "#e53e3e";
+        resultMessage.textContent = result.message || "Não foi dessa vez.";
+
+        // CORRIGIDO AQUI: pts -> pointsEarned
+        pointsEarned.textContent = "0 pontos";
     }
 
     if (timeDisplay) timeDisplay.textContent = `Tempo: ${result.timeTaken || '-'}s`;
@@ -230,7 +236,12 @@ function showResult(result) {
 
 function showEndScreen() {
     document.getElementById('finalScore').textContent = totalScore;
-    document.getElementById('finalTeam').textContent = teamName || 'Seu Time';
+    const finalTeamEl = document.getElementById('finalTeam');
+    const teamNameEl = document.getElementById('teamName');
+
+    if (finalTeamEl) {
+        finalTeamEl.textContent = teamNameEl ? teamNameEl.textContent : 'Seu Time';
+    }
 
     showScreen(endScreen);
 }

@@ -52,6 +52,12 @@ function setupEventListeners() {
     });
 }
 
+document.getElementById('btnReshow').addEventListener('click', () => {
+    if (confirm('Re-exibir pergunta/gráfico no telão?')) {
+        socket.emit('admin:reshowQuestion', currentGameId);
+    }
+});
+
 // Configurar listeners do Socket.IO
 function setupSocketListeners() {
     socket.on('game:started', () => {
@@ -246,7 +252,20 @@ function updateGameControls(status) {
     const btnRank = document.getElementById('btnShowRanking');
     const btnEnd = document.getElementById('btnEndGame');
 
-    btnStart.disabled = status !== 'waiting';
+    // MUDANÇA: Permite iniciar se estiver 'waiting' OU 'finished' (para reiniciar)
+    btnStart.disabled = status === 'active';
+
+    // Se estiver finished, muda o texto do botão para "Reiniciar Jogo"
+    if (status === 'finished') {
+        btnStart.textContent = "Reiniciar Jogo";
+        btnStart.classList.remove('btn-success');
+        btnStart.classList.add('btn-warning'); // Cor diferente para indicar reinício
+    } else {
+        btnStart.textContent = "Iniciar Jogo";
+        btnStart.classList.remove('btn-warning');
+        btnStart.classList.add('btn-success');
+    }
+
     btnNext.disabled = status === 'finished' || status === 'waiting';
     btnRank.disabled = status === 'waiting';
     btnEnd.disabled = status === 'finished' || status === 'waiting';

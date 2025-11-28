@@ -68,13 +68,21 @@ class Team {
 
   // Calcular pontuação total do time
   static async calculateTotalScore(teamId) {
-    const [result] = await pool.execute(
-      'SELECT SUM(total_score) as total FROM participants WHERE team_id = ?',
+    // Pega a soma dos pontos de todos os participantes
+    const [sumResult] = await pool.execute(
+      'SELECT SUM(total_score) as total_points, COUNT(id) as num_participants FROM participants WHERE team_id = ?',
       [teamId]
     );
-    const total = result[0].total || 0;
-    await this.updateScore(teamId, total);
-    return total;
+
+    const totalPoints = sumResult[0].total_points || 0;
+    const numParticipants = sumResult[0].num_participants || 1; // Evita divisão por zero
+
+    // Calcula a média (arredondada)
+    const averageScore = Math.round(totalPoints / numParticipants);
+
+    // Salva a média no time
+    await this.updateScore(teamId, averageScore);
+    return averageScore;
   }
 
   // Deletar time
