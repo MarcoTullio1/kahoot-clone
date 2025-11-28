@@ -13,29 +13,32 @@ document.addEventListener('DOMContentLoaded', () => {
     loadGames();
     setupSocketListeners();
 });
-
 function setupSocketListeners() {
     socket.on('game:started', () => console.log('Jogo iniciado!'));
 
     socket.on('question:new', (questionData) => {
+        console.log('Pergunta nova...');
         showQuestion(questionData);
     });
 
     socket.on('ranking:show', (rankingData) => {
-        console.log('Exibindo ranking...', rankingData);
+        console.log('Recebi ordem de Ranking:', rankingData);
+        // Força a parada de qualquer timer
+        stopTimer();
+        // Chama a função de exibição diretamente
         showRanking(rankingData);
     });
 
     socket.on('game:ended', () => {
-        // Força o status local para finished
+        console.log('Jogo acabou. Indo para o pódio...');
         if (currentGame) currentGame.status = 'finished';
 
+        // Pequeno delay e pede o ranking final
         setTimeout(() => {
             socket.emit('admin:showRanking', currentGameId);
-        }, 1000);
+        }, 500);
     });
 
-    // Recebe o gráfico de estatísticas
     socket.on('question:stats', (data) => {
         stopTimer();
         renderStatsChart(data);
@@ -47,8 +50,8 @@ function setupSocketListeners() {
     });
 
     socket.on('disconnect', () => {
-        console.log('Desconectado. Recarregando...');
-        setTimeout(() => window.location.reload(), 2000);
+        console.log('Desconectado...');
+        setTimeout(() => window.location.reload(), 3000);
     });
 }
 
@@ -158,16 +161,15 @@ function stopTimer() {
     }
 }
 
-// Função para desenhar o gráfico de barras verticais (Estilo Kahoot)
 function renderStatsChart(data) {
     const container = document.getElementById('displayAnswersContainer');
 
-    // Configura layout Flex para gráfico
+    // Configura layout do container principal
     container.style.display = 'flex';
     container.style.flexDirection = 'row';
-    container.style.alignItems = 'flex-end';
+    container.style.alignItems = 'flex-end'; // Garante que as colunas comecem de baixo
     container.style.justifyContent = 'space-around';
-    container.style.height = '450px';
+    container.style.height = '500px'; // Aumentei um pouco
     container.style.padding = '20px';
     container.style.gap = '15px';
 
@@ -176,42 +178,50 @@ function renderStatsChart(data) {
 
     container.innerHTML = data.distribution.map((item, index) => {
         const checkIcon = item.isCorrect ?
-            `<div style="margin-bottom: 10px; font-size: 2.5rem; background: white; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">✅</div>`
-            : '<div style="height: 50px; margin-bottom: 10px;"></div>';
+            `<div style="margin-bottom: 10px; font-size: 2.5rem; background: white; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.2); z-index: 10;">✅</div>`
+            : '<div style="height: 60px;"></div>'; // Espaço vazio para manter alinhamento
 
-        const barHeight = Math.max(10, item.percent);
+        // Altura da barra (mínimo 5% para aparecer)
+        const barHeight = Math.max(5, item.percent);
         const opacity = item.isCorrect ? '1' : '0.6';
 
         return `
-            <div style="display: flex; flex-direction: column; align-items: center; height: 100%; flex: 1; max-width: 150px;">
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; flex: 1; max-width: 150px;">
+                
                 ${checkIcon}
-                <div style="width: 100%; height: ${barHeight}%; background-color: ${colors[index]}; opacity: ${opacity}; border-radius: 5px 5px 0 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px; transition: height 1s ease-out; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+
+                <div style="width: 100%; height: ${barHeight}%; background-color: ${colors[index]}; opacity: ${opacity}; border-radius: 5px 5px 0 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px; transition: height 1s ease-out; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-height: 40px;">
                     <span style="color: white; font-weight: bold; font-size: 1.5rem; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">${item.count}</span>
                 </div>
-                <div style="width: 100%; height: 60px; background-color: ${colors[index]}; margin-top: 5px; border-radius: 0 0 5px 5px; display: flex; align-items: center; justify-content: center;">
+
+                <div style="width: 100%; height: 60px; background-color: ${colors[index]}; margin-top: 5px; border-radius: 0 0 5px 5px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                      <span style="color: white; font-weight: 900; font-size: 2rem;">${letters[index]}</span>
                 </div>
-                <div style="font-size: 0.9rem; color: #4a5568; margin-top: 10px; text-align: center; font-weight: 600; line-height: 1.2;">
+                
+                <div style="font-size: 1rem; color: #2d3748; margin-top: 10px; text-align: center; font-weight: 700; line-height: 1.2; width: 100%; word-wrap: break-word;">
                     ${item.text}
                 </div>
             </div>
         `;
     }).join('');
 }
-
 function showRanking(rankingData) {
     stopTimer();
 
+    // Verifica se é o final (Pódio)
+    // ADICIONAMOS: Verifica também se o Admin mandou um flag de 'final' nos dados (se possível)
+    // Por enquanto confiamos no status local
     if (currentGame && currentGame.status === 'finished') {
         showFinalRanking(rankingData);
-        return;
+    } else {
+        // Ranking Parcial
+        const rankingList = document.getElementById('displayRankingList');
+        if (rankingList) {
+            renderRankingList(rankingData.teams, rankingList);
+            showScreen(rankingDisplayScreen); // FORÇA A TROCA DE TELA AQUI
+        }
     }
-
-    const rankingList = document.getElementById('displayRankingList');
-    renderRankingList(rankingData.teams, rankingList);
-    showScreen(rankingDisplayScreen);
 }
-
 function showFinalRanking(rankingData) {
     const podiumContainer = document.querySelector('.podium');
     if (podiumContainer) podiumContainer.innerHTML = '';

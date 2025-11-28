@@ -7,6 +7,7 @@ module.exports = (io) => {
   const activeGames = new Map();
 
   io.on('connection', (socket) => {
+
     // --- ADMIN ---
     socket.on('admin:connect', async (gameId) => {
       socket.join(`game:${gameId}:admin`);
@@ -46,20 +47,24 @@ module.exports = (io) => {
       }
     });
 
+    // Botão "Voltar" (Destravado)
     socket.on('admin:reshowQuestion', async (gameId) => {
       const gameState = activeGames.get(gameId);
       const game = await Game.findById(gameId);
       if (!game || !gameState) return;
 
       const timeElapsed = (Date.now() - gameState.startTime) / 1000;
+
+      // Se o tempo já acabou, mostra o Gráfico direto
       if (timeElapsed >= gameState.timeLimit) {
         sendStats(gameId);
         return;
       }
 
-      // Reenvia pergunta com tempo restante
+      // Se ainda tem tempo, mostra a pergunta com o tempo que falta
       const question = game.questions[game.current_question_index];
-      const remainingTime = Math.max(1, Math.round(gameState.timeLimit - timeElapsed));
+      const remainingTime = Math.max(0, Math.round(gameState.timeLimit - timeElapsed)); // Mínimo 0
+
       const questionData = {
         id: question.id,
         text: question.question_text,
@@ -97,9 +102,23 @@ module.exports = (io) => {
         const gameId = team.game_id;
         socket.join(`game:${gameId}`);
         socket.participantId = participantId;
+        socket.teamId = teamId;
         socket.gameId = gameId;
 
         socket.emit('participant:joined', { participantId, teamId, nickname, score: currentScore });
+
+        // Verifica se já respondeu a pergunta atual para mostrar tela de espera
+        const gameState = activeGames.get(gameId);
+        if (gameState) {
+          const [ans] = await pool.execute(
+            'SELECT * FROM participant_answers WHERE participant_id = ? AND question_id = ?',
+            [participantId, gameState.currentQuestionId]
+          );
+          if (ans.length > 0) {
+            socket.emit('participant:answer_registered'); // Manda para tela de espera
+          }
+        }
+
         updateLiveCount(gameId);
       } catch (error) {
         socket.emit('error', { message: error.message });
@@ -117,12 +136,9 @@ module.exports = (io) => {
         const result = await Participant.submitAnswer(participantId, questionId, answerId, timeTaken);
 
         if (result) {
-          socket.emit('answer:result', {
-            success: true,
-            isCorrect: result.isCorrect,
-            pointsEarned: result.pointsEarned,
-            timeTaken: timeTaken.toFixed(2)
-          });
+          // MUDANÇA: Não envia o resultado (pontos) agora. Só confirma o recebimento.
+          socket.emit('participant:answer_registered');
+
           io.to(`game:${socket.gameId}:admin`).emit('participant:answered', { participantId, isCorrect: result.isCorrect });
           checkAllAnswered(socket.gameId, questionId);
         }
@@ -144,7 +160,7 @@ module.exports = (io) => {
       if (socket.gameId) updateLiveCount(socket.gameId);
     });
 
-    // --- FUNÇÕES AUXILIARES (Essenciais!) ---
+    // --- FUNÇÕES AUXILIARES ---
     async function startQuestion(gameId, index) {
       const game = await Game.findById(gameId);
       if (!game || !game.questions || !game.questions[index]) return;
@@ -188,7 +204,7 @@ module.exports = (io) => {
           if (gameState && gameState.currentQuestionId === questionId) {
             sendStats(gameId);
           }
-        }, 1500);
+        }, 1000);
       }
     }
 
@@ -197,6 +213,7 @@ module.exports = (io) => {
       if (!gameState) return;
       const qId = gameState.currentQuestionId;
 
+      // 1. Mandar gráfico para o Telão
       const [stats] = await pool.execute(
         `SELECT a.id, a.answer_text as text, a.is_correct, COUNT(pa.id) as count 
          FROM answers a 
@@ -205,6 +222,7 @@ module.exports = (io) => {
          GROUP BY a.id ORDER BY a.id ASC`, [qId]
       );
       const totalVotes = stats.reduce((sum, i) => sum + i.count, 0);
+
       io.to(`game:${gameId}:display`).emit('question:stats', {
         totalVotes,
         distribution: stats.map(s => ({
@@ -214,6 +232,45 @@ module.exports = (io) => {
           percent: totalVotes === 0 ? 0 : Math.round((s.count / totalVotes) * 100)
         }))
       });
+
+      // 2. MUDANÇA: Mandar o resultado individual para cada Participante
+      const sockets = await io.in(`game:${gameId}`).fetchSockets();
+
+      // Busca todas as respostas dessa pergunta
+      const [answers] = await pool.execute(
+        'SELECT participant_id, points_earned, time_taken, answer_id FROM participant_answers WHERE question_id = ?',
+        [qId]
+      );
+
+      // Cria um mapa para acesso rápido
+      const answersMap = {};
+      answers.forEach(a => answersMap[a.participant_id] = a);
+
+      // Itera sobre cada socket conectado e manda o resultado dele
+      for (const socket of sockets) {
+        if (socket.participantId) {
+          const myAnswer = answersMap[socket.participantId];
+
+          if (myAnswer) {
+            // Descobre se acertou olhando o 'stats' ou fazendo query extra.
+            // Simplificando: se points_earned > 0, acertou.
+            const isCorrect = myAnswer.points_earned > 0;
+
+            socket.emit('answer:result', {
+              isCorrect: isCorrect,
+              pointsEarned: myAnswer.points_earned,
+              timeTaken: myAnswer.time_taken
+            });
+          } else {
+            // Não respondeu a tempo
+            socket.emit('answer:result', {
+              isCorrect: false,
+              pointsEarned: 0,
+              message: "Tempo esgotado!"
+            });
+          }
+        }
+      }
     }
 
     async function sendRanking(gameId) {
